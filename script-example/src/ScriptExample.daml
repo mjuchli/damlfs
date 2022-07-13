@@ -7,11 +7,14 @@ import DA.Assert
 import DA.List
 import DA.Foldable (mapA_)
 
+type DirectoryId = ContractId Directory
+type FileId = ContractId File
+
 template File with
     owner: Party
     name: Text
     content: Text
-    path: ContractId Directory
+    path: DirectoryId
     public: Party
   where
     signatory owner
@@ -21,24 +24,33 @@ template File with
         user: Party
       controller owner
       do
-        assertMsg "User must be owner" (user == owner)
+        assertMsg "User must be owner" (user == owner) -- I think its not necessary
         archive self
+
+    nonconsuming choice MoveFile: FileId with
+        newPath: DirectoryId
+      controller owner
+      do
+        newPathDir <- fetch newPath
+        assertMsg "New location belongs to someone else" (newPathDir.owner == owner)
+        archive self
+        create this with path = newPath
 
 
 template Directory with
-    parent: Optional (ContractId Directory)
+    parent: Optional (DirectoryId)
     name: Text
     owner: Party
-    directories: [ContractId Directory]
-    files: [ContractId File]
+    directories: [DirectoryId]
+    files: [FileId]
     public: Party
   where
     signatory owner
     observer public
 
     -- TODO: not sure if required (see usage below)
-    -- nonconsuming choice AddDirectory: ContractId Directory with
-    --     directory: ContractId Directory
+    -- nonconsuming choice AddDirectory: DirectoryId with
+    --     directory: DirectoryId
     --   controller owner
     --   do
     --     archive self
@@ -47,12 +59,15 @@ template Directory with
     --       None -> return dirNew
     --       Some p -> exercise p AddDirectory with directory = dirNew
 
-    nonconsuming choice CreateDirectory: ContractId Directory with
+    nonconsuming choice CreateDirectory: DirectoryId with
         creator: Party
         dirName: Text
       controller owner
       do
-        assertMsg "User must be owner of directory" (creator == owner)
+        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
+        existing <- mapA fetch directories
+        assertMsg "Directory already exists" $ dirName `notElem` (map (\e -> e.name) existing)
+
         subDir <- create Directory with parent = Some self, owner = creator, name = dirName, directories = [], files = [], public = public
         archive self
         create this with directories = directories ++ [subDir]
@@ -61,15 +76,36 @@ template Directory with
         -- case parent of
         --   None -> return dirNew
         --   Some p -> exercise p AddDirectory with directory = dirNew
-        
 
-    nonconsuming choice CreateFile: ContractId File with
+    nonconsuming choice DeleteDirectory: () with
+        user: Party
+      controller owner
+      do
+        assertMsg "User must be owner" (user == owner)
+        -- mapA_ (\f -> exercise f DeleteFile with user=owner) files
+        archive self
+
+    nonconsuming choice MoveDirectory: DirectoryId with
+        newParent: DirectoryId
+      controller owner
+      do
+        newParentDir <- fetch newParent
+        assertMsg "New location belongs to someone else" (newParentDir.owner == owner)
+        newDir <- create this with parent = Some newParent
+        mapA_ (\f -> exercise f MoveFile with newPath = newDir) files
+        archive self
+        return newDir
+
+    nonconsuming choice CreateFile: FileId with
         creator: Party
         fileName: Text
         content: Text
       controller owner
       do
-        assertMsg "User must be owner of directory" (creator == owner)
+        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
+        existing <- mapA fetch files
+        assertMsg "File already exists" $ fileName `notElem` (map (\e -> e.name) existing)
+
         file <- create File with owner = creator, name = fileName, content = content, path = self, public = public
         archive self
         create this with files = files ++ [file]
@@ -111,7 +147,6 @@ test = do
     Directory None "/bob" parties.bob [] [] parties.bob
     ] (map snd bobDirs)
 
-
   -- Alice creates a file in /alice
   let aliceRootDir = head $ map fst aliceDirs
   submit alice $ exerciseCmd aliceRootDir (CreateFile alice "File1" "my name is Alice")
@@ -120,6 +155,9 @@ test = do
   assertEq [
       File parties.alice "File1" "my name is Alice" aliceRootDir parties.alice
     ] (map snd aliceFiles)
+
+  -- Alice cannot create file with same name
+  submitMustFail alice $ exerciseCmd aliceRootDir (CreateFile alice "File1" "")
 
   -- Bob is not allowed to create a file in /alice
   submitMustFail bob $ exerciseCmd aliceRootDir (CreateFile alice "File2" "my name is Bob")
@@ -131,17 +169,12 @@ test = do
   aliceFiles <- query @File alice
   assertEq [] (map snd aliceFiles)
 
+  -- Alice creates directory and file and subsequently removes directory
+  rootDir <- submit parties.alice $ createCmd (Directory None "/alice" parties.alice [] [] parties.alice)
+  fileInRootDir <- submit alice $ exerciseCmd rootDir (CreateFile alice "File1" "I will be removed soon")
+  submit alice $ exerciseCmd fileInRootDir (DeleteFile alice)
+  -- TODO: how to archive contract with dependency?
+  -- submit alice $ exerciseCmd rootDir (DeleteDirectory alice)
+  -- aliceDirs <- query @Directory alice
+  -- assertEq [] (map snd aliceDirs)
   pure ()
-
-
-
--- INITIALIZE_USER_BEGIN
-initializeUser : Script ()
-initializeUser = do
-  parties <- allocateParties
-  alice <- validateUserId "alice"
-  bob <- validateUserId "bob"
-  _ <- createUser (User alice (Some parties.alice)) [CanActAs parties.alice]
-  _ <- createUser (User bob (Some parties.bob)) [CanActAs parties.bob]
-  initialize parties
--- INITIALIZE_USER_END
