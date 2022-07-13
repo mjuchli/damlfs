@@ -1,0 +1,10 @@
+sdk-version: 2.2.0
+name: script-example
+source: src
+version: 0.0.1
+# script-dependencies-begin
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
+# script-dependencies-end

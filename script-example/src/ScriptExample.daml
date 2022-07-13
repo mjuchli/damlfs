@@ -1,0 +1,147 @@
+{-# LANGUAGE ApplicativeDo #-}
+
+module ScriptExample where
+
+import Daml.Script
+import DA.Assert
+import DA.List
+import DA.Foldable (mapA_)
+
+template File with
+    owner: Party
+    name: Text
+    content: Text
+    path: ContractId Directory
+    public: Party
+  where
+    signatory owner
+    observer public    
+
+    nonconsuming choice DeleteFile: () with
+        user: Party
+      controller owner
+      do
+        assertMsg "User must be owner" (user == owner)
+        archive self
+
+
+template Directory with
+    parent: Optional (ContractId Directory)
+    name: Text
+    owner: Party
+    directories: [ContractId Directory]
+    files: [ContractId File]
+    public: Party
+  where
+    signatory owner
+    observer public
+
+    -- TODO: not sure if required (see usage below)
+    -- nonconsuming choice AddDirectory: ContractId Directory with
+    --     directory: ContractId Directory
+    --   controller owner
+    --   do
+    --     archive self
+    --     dirNew <- create this with directories = directories ++ [directory]
+    --     case parent of
+    --       None -> return dirNew
+    --       Some p -> exercise p AddDirectory with directory = dirNew
+
+    nonconsuming choice CreateDirectory: ContractId Directory with
+        creator: Party
+        dirName: Text
+      controller owner
+      do
+        assertMsg "User must be owner of directory" (creator == owner)
+        subDir <- create Directory with parent = Some self, owner = creator, name = dirName, directories = [], files = [], public = public
+        archive self
+        create this with directories = directories ++ [subDir]
+        -- TODO: not sure if its necessary to propagate up the folder tree
+        -- dirNew <- create this with directories = directories ++ [subDir]
+        -- case parent of
+        --   None -> return dirNew
+        --   Some p -> exercise p AddDirectory with directory = dirNew
+        
+
+    nonconsuming choice CreateFile: ContractId File with
+        creator: Party
+        fileName: Text
+        content: Text
+      controller owner
+      do
+        assertMsg "User must be owner of directory" (creator == owner)
+        file <- create File with owner = creator, name = fileName, content = content, path = self, public = public
+        archive self
+        create this with files = files ++ [file]
+        return file
+
+-- Test Setup
+
+data LedgerParties = LedgerParties with
+  alice : Party
+  bob : Party
+
+allocateParties : Script LedgerParties
+allocateParties = do
+  alice <- allocateParty "alice"
+  bob <- allocateParty "bob"
+  pure (LedgerParties alice bob)
+
+initialize : LedgerParties -> Script ()
+initialize parties = do
+  dirAlice <- submit parties.alice $ createCmd (Directory None "/alice" parties.alice [] [] parties.alice)
+  dirBob <- submit parties.bob $ createCmd (Directory None "/bob" parties.bob [] [] parties.bob)
+  pure ()
+
+-- Run tests
+
+test : Script ()
+test = do
+  parties@LedgerParties{..} <- allocateParties
+  initialize parties
+
+  -- Create root directories for Alice and Bob
+  aliceDirs <- query @Directory alice
+  assertEq [
+    Directory None "/alice" parties.alice [] [] parties.alice
+    ] (map snd aliceDirs)
+
+  bobDirs <- query @Directory bob
+  assertEq [
+    Directory None "/bob" parties.bob [] [] parties.bob
+    ] (map snd bobDirs)
+
+
+  -- Alice creates a file in /alice
+  let aliceRootDir = head $ map fst aliceDirs
+  submit alice $ exerciseCmd aliceRootDir (CreateFile alice "File1" "my name is Alice")
+  
+  aliceFiles <- query @File alice
+  assertEq [
+      File parties.alice "File1" "my name is Alice" aliceRootDir parties.alice
+    ] (map snd aliceFiles)
+
+  -- Bob is not allowed to create a file in /alice
+  submitMustFail bob $ exerciseCmd aliceRootDir (CreateFile alice "File2" "my name is Bob")
+
+  -- Alice removes files
+  aliceFiles <- query @File alice
+  let aliceFileIds = map fst aliceFiles
+  mapA_ (\f -> submit alice $ exerciseCmd f (DeleteFile alice)) aliceFileIds
+  aliceFiles <- query @File alice
+  assertEq [] (map snd aliceFiles)
+
+  pure ()
+
+
+
+-- INITIALIZE_USER_BEGIN
+initializeUser : Script ()
+initializeUser = do
+  parties <- allocateParties
+  alice <- validateUserId "alice"
+  bob <- validateUserId "bob"
+  _ <- createUser (User alice (Some parties.alice)) [CanActAs parties.alice]
+  _ <- createUser (User bob (Some parties.bob)) [CanActAs parties.bob]
+  initialize parties
+-- INITIALIZE_USER_END
