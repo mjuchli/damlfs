@@ -1,0 +1,108 @@
+module Filesystem where
+
+import DA.Foldable (mapA_)
+
+type DirectoryId = ContractId Directory
+type FileId = ContractId File
+
+template File with
+    owner: Party
+    name: Text
+    content: Text
+    path: DirectoryId
+    public: Party
+  where
+    signatory owner
+    observer public    
+
+    nonconsuming choice DeleteFile: () with
+        user: Party
+      controller owner
+      do
+        assertMsg "User must be owner" (user == owner) -- I think its not necessary
+        archive self
+
+    nonconsuming choice MoveFile: FileId with
+        newPath: DirectoryId
+      controller owner
+      do
+        newPathDir <- fetch newPath
+        assertMsg "New location belongs to someone else" (newPathDir.owner == owner)
+        archive self
+        create this with path = newPath
+
+
+template Directory with
+    parent: Optional (DirectoryId)
+    name: Text
+    owner: Party
+    directories: [DirectoryId]
+    files: [FileId]
+    public: Party
+  where
+    signatory owner
+    observer public
+
+    -- TODO: not sure if required (see usage below)
+    -- nonconsuming choice AddDirectory: DirectoryId with
+    --     directory: DirectoryId
+    --   controller owner
+    --   do
+    --     archive self
+    --     dirNew <- create this with directories = directories ++ [directory]
+    --     case parent of
+    --       None -> return dirNew
+    --       Some p -> exercise p AddDirectory with directory = dirNew
+
+    nonconsuming choice CreateDirectory: DirectoryId with
+        creator: Party
+        dirName: Text
+      controller owner
+      do
+        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
+        existing <- mapA fetch directories
+        assertMsg "Directory already exists" $ dirName `notElem` (map (\e -> e.name) existing)
+
+        subDir <- create Directory with parent = Some self, owner = creator, name = dirName, directories = [], files = [], public = public
+        archive self
+        create this with directories = directories ++ [subDir]
+        
+        -- TODO: not sure if its necessary to propagate up the folder tree
+        -- dirNew <- create this with directories = directories ++ [subDir]
+        -- case parent of
+        --   None -> return dirNew
+        --   Some p -> exercise p AddDirectory with directory = dirNew
+
+    nonconsuming choice DeleteDirectory: () with
+        user: Party
+      controller owner
+      do
+        assertMsg "User must be owner" (user == owner)
+        -- mapA_ (\f -> exercise f DeleteFile with user=owner) files
+        archive self
+
+    nonconsuming choice MoveDirectory: DirectoryId with
+        newParent: DirectoryId
+      controller owner
+      do
+        newParentDir <- fetch newParent
+        assertMsg "New location belongs to someone else" (newParentDir.owner == owner)
+        newDir <- create this with parent = Some newParent
+        mapA_ (\f -> exercise f MoveFile with newPath = newDir) files
+        archive self
+        return newDir
+
+    nonconsuming choice CreateFile: FileId with
+        creator: Party
+        fileName: Text
+        content: Text
+      controller owner
+      do
+        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
+        existing <- mapA fetch files
+        assertMsg "File already exists" $ fileName `notElem` (map (\e -> e.name) existing)
+
+        file <- create File with owner = creator, name = fileName, content = content, path = self, public = public
+        archive self
+        create this with files = files ++ [file]
+        return file
