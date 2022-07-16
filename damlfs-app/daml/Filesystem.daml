@@ -6,42 +6,38 @@ type DirectoryId = ContractId Directory
 type FileId = ContractId File
 
 template File with
+    creator: Party
     owner: Party
     name: Text
     content: Text
     path: DirectoryId
-    public: Party
   where
-    signatory owner
-    observer public    
+    signatory creator
+    observer owner
 
     nonconsuming choice DeleteFile: () with
-        user: Party
       controller owner
       do
-        assertMsg "User must be owner" (user == owner) -- I think its not necessary
         archive self
 
-    nonconsuming choice MoveFile: FileId with
+    choice ChangeFileOwner: FileId with
         newPath: DirectoryId
+        newOwner: Party
       controller owner
       do
-        newPathDir <- fetch newPath
-        assertMsg "New location belongs to someone else" (newPathDir.owner == owner)
-        archive self
-        create this with path = newPath
+        create this with path = newPath, owner = newOwner
 
 
 template Directory with
+    creator: Party
     parent: Optional (DirectoryId)
     name: Text
     owner: Party
     directories: [DirectoryId]
     files: [FileId]
-    public: Party
   where
-    signatory owner
-    observer public
+    signatory creator
+    observer owner
 
     -- TODO: not sure if required (see usage below)
     -- nonconsuming choice AddDirectory: DirectoryId with
@@ -55,15 +51,13 @@ template Directory with
     --       Some p -> exercise p AddDirectory with directory = dirNew
 
     nonconsuming choice CreateDirectory: DirectoryId with
-        creator: Party
         dirName: Text
       controller owner
       do
-        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
         existing <- mapA fetch directories
         assertMsg "Directory already exists" $ dirName `notElem` (map (\e -> e.name) existing)
 
-        subDir <- create Directory with parent = Some self, owner = creator, name = dirName, directories = [], files = [], public = public
+        subDir <- create Directory with creator = creator, parent = Some self, owner = owner, name = dirName, directories = [], files = []
         archive self
         create this with directories = directories ++ [subDir]
         
@@ -74,36 +68,31 @@ template Directory with
         --   Some p -> exercise p AddDirectory with directory = dirNew
 
     nonconsuming choice DeleteDirectory: () with
-        user: Party
       controller owner
       do
-        assertMsg "User must be owner" (user == owner)
-        mapA_ (\d -> exercise d DeleteDirectory with user=owner) directories
-        mapA_ (\f -> exercise f DeleteFile with user=owner) files
+        mapA_ (`exercise` DeleteDirectory) directories
+        mapA_ (`exercise` DeleteFile) files
         archive self
 
-    nonconsuming choice MoveDirectory: DirectoryId with
-        newParent: DirectoryId
+    nonconsuming choice ChangeDirectoryOwner: DirectoryId with
+        newParent: Optional (DirectoryId)
+        newOwner: Party
       controller owner
       do
-        newParentDir <- fetch newParent
-        assertMsg "New location belongs to someone else" (newParentDir.owner == owner)
-        newDir <- create this with parent = Some newParent
-        mapA_ (\f -> exercise f MoveFile with newPath = newDir) files
         archive self
-        return newDir
+        new <- create this with owner = newOwner, parent = None
+        mapA_ (\d -> exercise d ChangeDirectoryOwner with newParent = Some new, newOwner = owner) directories
+        mapA_ (\f -> exercise f ChangeFileOwner with newPath = new, newOwner = owner) files
+        return new
 
     nonconsuming choice CreateFile: FileId with
-        creator: Party
         fileName: Text
         content: Text
       controller owner
       do
-        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
         existing <- mapA fetch files
         assertMsg "File already exists" $ fileName `notElem` (map (\e -> e.name) existing)
-
-        file <- create File with owner = creator, name = fileName, content = content, path = self, public = public
+        file <- create File with creator = creator, owner = owner, name = fileName, content = content, path = self
         archive self
         create this with files = files ++ [file]
         return file

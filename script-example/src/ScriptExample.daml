@@ -11,42 +11,38 @@ type DirectoryId = ContractId Directory
 type FileId = ContractId File
 
 template File with
+    creator: Party
     owner: Party
     name: Text
     content: Text
     path: DirectoryId
-    public: Party
   where
-    signatory owner
-    observer public    
+    signatory creator
+    observer owner
 
     nonconsuming choice DeleteFile: () with
-        user: Party
       controller owner
       do
-        assertMsg "User must be owner" (user == owner) -- I think its not necessary
         archive self
 
-    nonconsuming choice MoveFile: FileId with
+    choice ChangeFileOwner: FileId with
         newPath: DirectoryId
+        newOwner: Party
       controller owner
       do
-        newPathDir <- fetch newPath
-        assertMsg "New location belongs to someone else" (newPathDir.owner == owner)
-        archive self
-        create this with path = newPath
+        create this with path = newPath, owner = newOwner
 
 
 template Directory with
+    creator: Party
     parent: Optional (DirectoryId)
     name: Text
     owner: Party
     directories: [DirectoryId]
     files: [FileId]
-    public: Party
   where
-    signatory owner
-    observer public
+    signatory creator
+    observer owner
 
     -- TODO: not sure if required (see usage below)
     -- nonconsuming choice AddDirectory: DirectoryId with
@@ -60,17 +56,16 @@ template Directory with
     --       Some p -> exercise p AddDirectory with directory = dirNew
 
     nonconsuming choice CreateDirectory: DirectoryId with
-        creator: Party
         dirName: Text
       controller owner
       do
-        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
         existing <- mapA fetch directories
         assertMsg "Directory already exists" $ dirName `notElem` (map (\e -> e.name) existing)
 
-        subDir <- create Directory with parent = Some self, owner = creator, name = dirName, directories = [], files = [], public = public
+        subDir <- create Directory with creator = creator, parent = Some self, owner = owner, name = dirName, directories = [], files = []
         archive self
         create this with directories = directories ++ [subDir]
+        
         -- TODO: not sure if its necessary to propagate up the folder tree
         -- dirNew <- create this with directories = directories ++ [subDir]
         -- case parent of
@@ -78,35 +73,32 @@ template Directory with
         --   Some p -> exercise p AddDirectory with directory = dirNew
 
     nonconsuming choice DeleteDirectory: () with
-        user: Party
       controller owner
       do
-        assertMsg "User must be owner" (user == owner)
-        -- mapA_ (\f -> exercise f DeleteFile with user=owner) files
+        mapA_ (`exercise` DeleteDirectory) directories
+        mapA_ (`exercise` DeleteFile) files
         archive self
 
-    nonconsuming choice MoveDirectory: DirectoryId with
-        newParent: DirectoryId
+    nonconsuming choice ChangeDirectoryOwner: DirectoryId with
+        newParent: Optional (DirectoryId)
+        newOwner: Party
       controller owner
       do
-        newParentDir <- fetch newParent
-        assertMsg "New location belongs to someone else" (newParentDir.owner == owner)
-        newDir <- create this with parent = Some newParent
-        mapA_ (\f -> exercise f MoveFile with newPath = newDir) files
+        assertMsg "Already belongs to this person" $ owner /= newOwner
         archive self
-        return newDir
+        new <- create this with owner = newOwner, parent = None
+        mapA_ (\d -> exercise d ChangeDirectoryOwner with newParent = Some new, newOwner = owner) directories
+        mapA_ (\f -> exercise f ChangeFileOwner with newPath = new, newOwner = owner) files
+        return new
 
     nonconsuming choice CreateFile: FileId with
-        creator: Party
         fileName: Text
         content: Text
       controller owner
       do
-        assertMsg "User must be owner of directory" (creator == owner) -- I think its not necessary
         existing <- mapA fetch files
         assertMsg "File already exists" $ fileName `notElem` (map (\e -> e.name) existing)
-
-        file <- create File with owner = creator, name = fileName, content = content, path = self, public = public
+        file <- create File with creator = creator, owner = owner, name = fileName, content = content, path = self
         archive self
         create this with files = files ++ [file]
         return file
@@ -125,8 +117,8 @@ allocateParties = do
 
 initialize : LedgerParties -> Script ()
 initialize parties = do
-  dirAlice <- submit parties.alice $ createCmd (Directory None "/alice" parties.alice [] [] parties.alice)
-  dirBob <- submit parties.bob $ createCmd (Directory None "/bob" parties.bob [] [] parties.bob)
+  dirAlice <- submit parties.alice $ createCmd (Directory parties.alice None "/alice" parties.alice [] [])
+  dirBob <- submit parties.bob $ createCmd (Directory parties.bob None "/bob" parties.bob [] [])
   pure ()
 
 -- Run tests
@@ -139,40 +131,41 @@ test = do
   -- Create root directories for Alice and Bob
   aliceDirs <- query @Directory alice
   assertEq [
-    Directory None "/alice" parties.alice [] [] parties.alice
+    Directory parties.alice None "/alice" parties.alice [] []
     ] (map snd aliceDirs)
 
   bobDirs <- query @Directory bob
   assertEq [
-    Directory None "/bob" parties.bob [] [] parties.bob
+    Directory parties.bob None "/bob" parties.bob [] []
     ] (map snd bobDirs)
 
   -- Alice creates a file in /alice
   let aliceRootDir = head $ map fst aliceDirs
-  submit alice $ exerciseCmd aliceRootDir (CreateFile alice "File1" "my name is Alice")
+  submit alice $ exerciseCmd aliceRootDir (CreateFile "File1" "my name is Alice")
   
   aliceFiles <- query @File alice
   assertEq [
-      File parties.alice "File1" "my name is Alice" aliceRootDir parties.alice
+      File parties.alice parties.alice "File1" "my name is Alice" aliceRootDir
     ] (map snd aliceFiles)
 
   -- Alice cannot create file with same name
-  submitMustFail alice $ exerciseCmd aliceRootDir (CreateFile alice "File1" "")
+  submitMustFail alice $ exerciseCmd aliceRootDir (CreateFile "File1" "")
 
   -- Bob is not allowed to create a file in /alice
-  submitMustFail bob $ exerciseCmd aliceRootDir (CreateFile alice "File2" "my name is Bob")
+  submitMustFail bob $ exerciseCmd aliceRootDir (CreateFile "File2" "my name is Bob")
 
-  -- Alice removes files
+  -- Alice/Bob removes files
   aliceFiles <- query @File alice
   let aliceFileIds = map fst aliceFiles
-  mapA_ (\f -> submit alice $ exerciseCmd f (DeleteFile alice)) aliceFileIds
+  mapA_ (\f -> submitMustFail bob $ exerciseCmd f DeleteFile) aliceFileIds
+  mapA_ (\f -> submit alice $ exerciseCmd f DeleteFile) aliceFileIds
   aliceFiles <- query @File alice
   assertEq [] (map snd aliceFiles)
 
   -- Alice creates directory and file and subsequently removes directory
-  rootDir <- submit parties.alice $ createCmd (Directory None "/alice" parties.alice [] [] parties.alice)
-  fileInRootDir <- submit alice $ exerciseCmd rootDir (CreateFile alice "File1" "I will be removed soon")
-  submit alice $ exerciseCmd fileInRootDir (DeleteFile alice)
+  rootDir <- submit parties.alice $ createCmd (Directory parties.alice None "/alice" parties.alice [] [])
+  fileInRootDir <- submit alice $ exerciseCmd rootDir (CreateFile "File1" "I will be removed soon")
+  submit alice $ exerciseCmd fileInRootDir DeleteFile
   -- TODO: how to archive contract with dependency?
   -- submit alice $ exerciseCmd rootDir (DeleteDirectory alice)
   -- aliceDirs <- query @Directory alice

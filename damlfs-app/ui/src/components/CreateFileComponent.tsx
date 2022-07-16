@@ -29,7 +29,7 @@ const CreateFile: React.FC<Props> = ({ partyToAlias }) => {
 
             const parentContract = dirsResult.contracts.find(d => d.payload.name === parentDir)?.contractId;
             if (parentContract !== undefined) {
-                await ledger.exercise(Filesystem.Directory.CreateFile, parentContract, { creator: sender, fileName: fileName, content:content })
+                await ledger.exercise(Filesystem.Directory.CreateFile, parentContract, { fileName: fileName, content:content })
             } else {
                 alert("Parent directory does not exist!");
             }

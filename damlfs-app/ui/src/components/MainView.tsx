@@ -13,6 +13,7 @@ import CreateDirectory from './CreateDirectoryComponent';
 import CreateFile from './CreateFileComponent';
 import RemoveFile from './RemoveFileComponent';
 import RemoveDirectory from './RemoveDirectoryComponent';
+import ChangeDirectoryOwner from './ChangeDirectoryOwnerComponent';
 
 // USERS_BEGIN
 const MainView: React.FC = () => {
@@ -107,6 +108,8 @@ const MainView: React.FC = () => {
               <RemoveFile partyToAlias={partyToAlias} />
               <Divider />
               <RemoveDirectory partyToAlias={partyToAlias} />
+              <Divider />
+              <ChangeDirectoryOwner partyToAlias={partyToAlias} />
               <Divider />
               <FileTree partyToAlias={partyToAlias}/>
             </Segment>

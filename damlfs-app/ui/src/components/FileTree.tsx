@@ -25,7 +25,7 @@ const FileTree: React.FC<Props> = ({ partyToAlias }) => {
 
     const dirsResult = userContext.useStreamQueries(Filesystem.Directory);
     const filesResult = userContext.useStreamQueries(Filesystem.File);
-    console.log(filesResult)
+
     const dirContractToPayload = dirsResult.contracts.reduce((map, c) => {
         map.set(c.contractId, c.payload!)
         return map
@@ -64,7 +64,6 @@ const FileTree: React.FC<Props> = ({ partyToAlias }) => {
             <List relaxed>
                 {dirsResult.contracts.map(dir => {
                     const contract = dir.contractId;
-                    console.log(contract);
                     const { name, owner, directories, files } = dir.payload;
                     return (
                         <div>
@@ -93,13 +92,12 @@ const FileTree: React.FC<Props> = ({ partyToAlias }) => {
     const dom = (
         <div>
             <h2>Filetree</h2>
-            #dirs: {dirsResult.contracts.length}
+            #dirs: {dirsResult.contracts.filter(c => c.payload.owner === userContext.useParty()).length}
             &nbsp;&nbsp;&nbsp;
-            #files: {filesResult.contracts.length}
+            #files: {filesResult.contracts.filter(c => c.payload.owner === userContext.useParty()).length}
             <List relaxed>
-                {dirsResult.contracts.filter(c => c.payload.parent === null).map(dir => {
+                {dirsResult.contracts.filter(c => c.payload.owner === userContext.useParty()).filter(c => c.payload.parent === null).map(dir => {
                     const contract = dir.contractId;
-                    console.log(contract);
                     const { name, owner, directories, files } = dir.payload;
                     return (
                         <div>

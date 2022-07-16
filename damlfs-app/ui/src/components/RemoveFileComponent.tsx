@@ -31,7 +31,7 @@ const RemoveFile: React.FC<Props> = ({ partyToAlias }) => {
                 alert("File does not exist!");
                 return;
             }
-            await ledger.exercise(Filesystem.File.DeleteFile, fileContract, { user: sender })
+            await ledger.exercise(Filesystem.File.DeleteFile, fileContract, { })
 
 
             setFileName("")
