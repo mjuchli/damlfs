@@ -28,7 +28,7 @@ const RemoveFile: React.FC<Props> = ({ partyToAlias }) => {
 
             const fileContract = filesResult.contracts.find(d => d.payload.name === fileName)?.contractId;
             if (fileContract === undefined) {
-                alert("File name does not exist!"); 
+                alert("File does not exist!");
                 return;
             }
             await ledger.exercise(Filesystem.File.DeleteFile, fileContract, { user: sender })

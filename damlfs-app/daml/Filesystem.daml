@@ -78,7 +78,8 @@ template Directory with
       controller owner
       do
         assertMsg "User must be owner" (user == owner)
-        -- mapA_ (\f -> exercise f DeleteFile with user=owner) files
+        mapA_ (\d -> exercise d DeleteDirectory with user=owner) directories
+        mapA_ (\f -> exercise f DeleteFile with user=owner) files
         archive self
 
     nonconsuming choice MoveDirectory: DirectoryId with

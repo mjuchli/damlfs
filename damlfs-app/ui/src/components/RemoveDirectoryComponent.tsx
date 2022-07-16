@@ -29,7 +29,7 @@ const RemoveDirectory: React.FC<Props> = ({ partyToAlias }) => {
 
             const contract = dirsResult.contracts.find(d => d.payload.name === dirName)?.contractId;
             if (contract === undefined) {
-                alert("File name does not exist!"); 
+                alert("Directory does not exist!"); 
                 return;
             }
             await ledger.exercise(Filesystem.Directory.DeleteDirectory, contract, { user: sender })

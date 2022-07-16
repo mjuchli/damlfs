@@ -93,6 +93,9 @@ const FileTree: React.FC<Props> = ({ partyToAlias }) => {
     const dom = (
         <div>
             <h2>Filetree</h2>
+            #dirs: {dirsResult.contracts.length}
+            &nbsp;&nbsp;&nbsp;
+            #files: {filesResult.contracts.length}
             <List relaxed>
                 {dirsResult.contracts.filter(c => c.payload.parent === null).map(dir => {
                     const contract = dir.contractId;
@@ -108,7 +111,7 @@ const FileTree: React.FC<Props> = ({ partyToAlias }) => {
                                     directories.map(d => {
                                         const subdir = dirContractToPayload.get(d);
                                         return (
-                                            <ListItem>
+                                            <ListItem key={subdir?.name}>
                                                 -- (d) {subdir?.name}
                                             </ListItem>
                                         )
@@ -118,7 +121,7 @@ const FileTree: React.FC<Props> = ({ partyToAlias }) => {
                                     files.map(f => {
                                         const file = fileContractToPayload.get(f);
                                         return (
-                                            <ListItem>
+                                            <ListItem key={file?.name}>
                                                 -- {file?.name} ("{file?.content}")
                                             </ListItem>
                                         )
