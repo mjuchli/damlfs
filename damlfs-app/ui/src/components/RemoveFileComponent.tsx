@@ -1,10 +1,8 @@
 import React from 'react'
 
-import { User, Filesystem } from '@daml.js/damlfs-app';
+import { Filesystem } from '@daml.js/damlfs-app';
 import { userContext } from './App';
 import { Form, Button } from 'semantic-ui-react';
-import { Party, Optional, ContractId } from '@daml/types';
-import { Directory } from '@daml.js/damlfs-app/lib/Filesystem';
 
 type Props = {
     partyToAlias: Map<string, string>
@@ -15,7 +13,6 @@ type Props = {
 const RemoveFile: React.FC<Props> = ({ partyToAlias }) => {
     const filesResult = userContext.useStreamQueries(Filesystem.File);
 
-    const sender = userContext.useParty();
     const [fileName, setFileName] = React.useState("");
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const ledger = userContext.useLedger();

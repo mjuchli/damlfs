@@ -1,10 +1,8 @@
 import React from 'react'
 
-import { User, Filesystem } from '@daml.js/damlfs-app';
+import { Filesystem } from '@daml.js/damlfs-app';
 import { userContext } from './App';
 import { Form, Button } from 'semantic-ui-react';
-import { Party, Optional, ContractId } from '@daml/types';
-import { Directory } from '@daml.js/damlfs-app/lib/Filesystem';
 
 type Props = {
     partyToAlias: Map<string, string>

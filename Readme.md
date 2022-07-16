@@ -4,9 +4,9 @@ This project provides a simplified filesystem written in `daml` and comes with a
 
 ## Templates
 
-The newly created templates `File` and `Directory` with their respective contracts can be found under `damlfs-app/daml/Filesystem.daml`.
+The newly created templates `File` and `Directory` with their respective choices can be found under `damlfs-app/daml/Filesystem.daml`.
 
-Both templates work with a `signatory` (*creator*) and an `observer` (*owner*).
+Both templates work with a `signatory` *creator* and an `observer` *owner*.
 Hence once the ownership of a directory is passed to another user, the new owner must trust the original creator as this party could archive the contract at any given time.
 
 ### File
@@ -50,7 +50,7 @@ The following components were added to `damlfs-app/ui/src/components` and integr
 
 ## Tests
 
-Tests against the contract can be found in `./script-example/ScriptExample.daml`.
+Tests against the choices can be found in `./script-example/ScriptExample.daml`.
 The `Script` context is used, which allows to run the tests in the cli.
 
 1. Build
