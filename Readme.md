@@ -7,7 +7,7 @@ This project provides a simplified filesystem written in `daml` and comes with a
 The newly created templates `File` and `Directory` with their respective choices can be found under `damlfs-app/daml/Filesystem.daml`.
 
 Both templates work with a `signatory` *creator* and an `observer` *owner*.
-Hence once the ownership of a directory is passed to another user, the new owner must trust the original creator as this party could archive the contract at any given time.
+Hence, once the ownership of a directory is passed to another user, the new owner must trust the original creator as this party could archive the contract at any given time.
 
 ### File
 
@@ -46,7 +46,7 @@ The following components were added to `damlfs-app/ui/src/components` and integr
 - **CreateFileComponent**: allows to create a file within a directory
 - **RemoveDirectoryComponent**: allows to remove a (sub-)directory.
 - **RemoveFileComponent**: allows to remove a single file (residing within a directory).
-- **FileTreeComponent**: a directory- and filetree structure (currently only 2 levels displayed).
+- **FileTreeComponent**: a directory- and file-tree structure (currently only 2 levels supported).
 
 ## Tests
 
@@ -64,7 +64,7 @@ daml start
 daml script --dar .daml/dist/script-example-0.0.1.dar --script-name ScriptExample:test --ledger-host localhost --ledger-port 6865
 ```
  
-## Questions / Remarks
+## Discussion
 
 **Bidirectional relationship**
 
