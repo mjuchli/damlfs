@@ -10,6 +10,9 @@ import UserList from './UserList';
 import PartyListEdit from './PartyListEdit';
 import FileTree from './FileTree';
 import CreateDirectory from './CreateDirectoryComponent';
+import CreateFile from './CreateFileComponent';
+import RemoveFile from './RemoveFileComponent';
+import RemoveDirectory from './RemoveDirectoryComponent';
 
 // USERS_BEGIN
 const MainView: React.FC = () => {
@@ -98,6 +101,12 @@ const MainView: React.FC = () => {
                 </Header.Content>
               </Header>
               <CreateDirectory partyToAlias={partyToAlias} />
+              <Divider />
+              <CreateFile partyToAlias={partyToAlias} />
+              <Divider />
+              <RemoveFile partyToAlias={partyToAlias} />
+              <Divider />
+              <RemoveDirectory partyToAlias={partyToAlias} />
               <Divider />
               <FileTree partyToAlias={partyToAlias}/>
             </Segment>

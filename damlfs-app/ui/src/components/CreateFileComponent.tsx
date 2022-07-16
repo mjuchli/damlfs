@@ -12,11 +12,12 @@ type Props = {
 /**
  * React component displaying the list of messages for the current user.
  */
-const CreateDirectory: React.FC<Props> = ({ partyToAlias }) => {
+const CreateFile: React.FC<Props> = ({ partyToAlias }) => {
     const dirsResult = userContext.useStreamQueries(Filesystem.Directory);
 
     const sender = userContext.useParty();
     const [parentDir, setParentDir] = React.useState("");
+    const [fileName, setFileName] = React.useState("");
     const [content, setContent] = React.useState("");
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const ledger = userContext.useLedger();
@@ -24,30 +25,18 @@ const CreateDirectory: React.FC<Props> = ({ partyToAlias }) => {
     const submitMessage = async (event: React.FormEvent) => {
         try {
             event.preventDefault();
-
             setIsSubmitting(true);
-            if (parentDir !== "") {
-                const parentContract = dirsResult.contracts.find(d => d.payload.name === parentDir)?.contractId;
-                if (parentContract !== undefined) {
-                    await ledger.exercise(Filesystem.Directory.CreateDirectory, parentContract, { creator: sender, dirName: content })
-                } else {
-                    alert("Parent directory does not exist!");
-                }
 
+            const parentContract = dirsResult.contracts.find(d => d.payload.name === parentDir)?.contractId;
+            if (parentContract !== undefined) {
+                await ledger.exercise(Filesystem.Directory.CreateFile, parentContract, { creator: sender, fileName: fileName, content:content })
             } else {
-                const r = await ledger.create(Filesystem.Directory, {
-                    parent: null,
-                    name: content,
-                    owner: sender,
-                    files: [],
-                    directories: [],
-                    public: sender
-                } as Directory)
-                console.log(r);
+                alert("Parent directory does not exist!");
             }
 
             setContent("");
             setParentDir("")
+            setFileName("")
         } catch (error) {
             alert(`Error sending message:\n${JSON.stringify(error)}`);
         } finally {
@@ -57,7 +46,7 @@ const CreateDirectory: React.FC<Props> = ({ partyToAlias }) => {
 
     return (
         <div>
-            <h3>mkdir</h3>
+            <h3>touch</h3>
             <Form onSubmit={submitMessage}>
                 <Form.Input
                     placeholder="Parent directory name"
@@ -65,14 +54,19 @@ const CreateDirectory: React.FC<Props> = ({ partyToAlias }) => {
                     onChange={event => setParentDir(event.currentTarget.value)}
                 />
                 <Form.Input
-                    placeholder="Directory name"
+                    placeholder="File name"
+                    value={fileName}
+                    onChange={event => setFileName(event.currentTarget.value)}
+                />
+                <Form.Input
+                    placeholder="Content"
                     value={content}
                     onChange={event => setContent(event.currentTarget.value)}
                 />
                 <Button
                     fluid
                     type="submit"
-                    disabled={isSubmitting || content === ""}
+                    disabled={isSubmitting || fileName === "" || parentDir === ""}
                     loading={isSubmitting}
                     content="Send"
                 />
@@ -81,4 +75,4 @@ const CreateDirectory: React.FC<Props> = ({ partyToAlias }) => {
     );
 };
 
-export default CreateDirectory;
+export default CreateFile;
