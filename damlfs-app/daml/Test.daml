@@ -1,0 +1,109 @@
+module Test where
+
+import Daml.Script
+import DA.Assert
+import DA.List
+import DA.Foldable (mapA_)
+import Filesystem
+
+-- Test Setup
+
+data LedgerParties = LedgerParties with
+  alice : Party
+  bob : Party
+
+allocateParties : Script LedgerParties
+allocateParties = do
+  alice <- allocateParty "alice"
+  bob <- allocateParty "bob"
+  pure (LedgerParties alice bob)
+
+initialize : LedgerParties -> Script ()
+initialize parties = do
+  dirAlice <- submit parties.alice $ createCmd (Directory parties.alice None "/alice" parties.alice [] [])
+  dirBob <- submit parties.bob $ createCmd (Directory parties.bob None "/bob" parties.bob [] [])
+  pure ()
+
+-- Run tests
+
+testMkdir parties = do
+    aliceDirs <- query @Directory parties.alice
+    assertEq [
+        Directory parties.alice None "/alice" parties.alice [] []
+        ] (map snd aliceDirs)
+
+    bobDirs <- query @Directory parties.bob
+    assertEq [
+        Directory parties.bob None "/bob" parties.bob [] []
+        ] (map snd bobDirs)
+    return ()
+
+testTouch parties = do
+    -- Alice creates a file in /alice
+    aliceDirs <- query @Directory parties.alice
+    let aliceRootDir = head $ map fst aliceDirs
+    submit parties.alice $ exerciseCmd aliceRootDir (CreateFile "File1" "my name is Alice")
+    aliceFiles <- query @File parties.alice
+    assertEq [
+        File parties.alice parties.alice "File1" "my name is Alice" aliceRootDir
+        ] (map snd aliceFiles)
+
+    -- Alice cannot create file with same name
+    submitMustFail parties.alice $ exerciseCmd aliceRootDir (CreateFile "File1" "")
+
+    -- Bob is not allowed to create a file in /alice
+    submitMustFail parties.bob $ exerciseCmd aliceRootDir (CreateFile "File2" "my name is Bob")
+
+testRm parties = do
+    aliceFiles <- query @File parties.alice
+    let aliceFileIds = map fst aliceFiles
+
+    -- Bob is not allowed to removes files
+    mapA_ (\f -> submitMustFail parties.bob $ exerciseCmd f DeleteFile) aliceFileIds
+
+    -- Alice removes files
+    mapA_ (\f -> submit parties.alice $ exerciseCmd f DeleteFile) aliceFileIds
+    aliceFiles <- query @File parties.alice
+    assertEq [] (map snd aliceFiles)
+
+testRmrf parties = do
+
+    -- Alice creates directory and file and subsequently removes directory
+    rootDir <- submit parties.alice $ createCmd (Directory parties.alice None "/root" parties.alice [] [])
+    fileInRootDir <- submit parties.alice $ exerciseCmd rootDir (CreateFile "File1" "I will be removed soon")
+    submit parties.alice $ exerciseCmd fileInRootDir DeleteFile
+    
+    -- TODO: bidirectional
+    -- submit alice $ exerciseCmd rootDir (DeleteDirectory alice)
+    -- aliceDirs <- query @Directory alice
+    -- assertEq [] (map snd aliceDirs)
+
+testChown parties = do
+    -- Alice creates directory
+    d <- submit parties.alice $ createCmd (Directory parties.alice None "/shared" parties.alice [] [])
+    dNewOwner <- submit parties.alice $ exerciseCmd d (ChangeDirectoryOwner None parties.bob)
+    aliceDirs <- query @Directory parties.alice
+
+    let sharedDir = map snd (filter (\(a, b) -> a == dNewOwner) aliceDirs)
+    assertEq [
+        Directory parties.alice None "/shared" parties.bob [] []
+        ] sharedDir
+
+    bobDirs <- query @Directory parties.bob
+    let sharedDir = map snd (filter (\(a, b) -> a == dNewOwner) bobDirs)
+
+    assertEq [
+        Directory parties.alice None "/shared" parties.bob [] []
+        ] sharedDir
+
+    
+
+test : Script ()
+test = do
+    parties@LedgerParties{..} <- allocateParties
+    initialize parties
+    testMkdir parties
+    testTouch parties
+    testRm parties
+    testRmrf parties
+    testChown parties

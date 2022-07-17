@@ -4,7 +4,7 @@ This project provides a simplified filesystem written in `daml` and comes with a
 
 ## Templates
 
-The newly created templates `File` and `Directory` with their respective choices can be found under `damlfs-app/daml/Filesystem.daml`.
+The newly created templates `File` and `Directory` with their respective choices can be found under `./daml/Filesystem.daml`.
 
 Both templates work with a `signatory` *creator* and an `observer` *owner*.
 Hence, once the ownership of a directory is passed to another user, the new owner must trust the original creator as this party could archive the contract at any given time.
@@ -40,7 +40,7 @@ Choices:
 
 ## UI
 
-The following components were added to `damlfs-app/ui/src/components` and integrated into the `MainView.tsx`:
+The following components were added to `./ui/src/components` and integrated into the `MainView.tsx`:
 
 - **CreateDirectoryComponent**: allows to create a new (sub-)directory.
 - **CreateFileComponent**: allows to create a file within a directory
@@ -50,18 +50,17 @@ The following components were added to `damlfs-app/ui/src/components` and integr
 
 ## Tests
 
-Tests against the choices can be found in `./script-example/ScriptExample.daml`.
+Tests against the choices can be found in `./daml/Test.daml`.
 The `Script` context is used, which allows to run the tests in the cli.
 
 1. Build
 ```
-cd script-example
 daml start
 ```
 
 2. Run tests
 ```
-daml script --dar .daml/dist/script-example-0.0.1.dar --script-name ScriptExample:test --ledger-host localhost --ledger-port 6865
+daml script --dar .daml/dist/damlfs-app-0.1.0.dar --script-name Test:test --ledger-host localhost --ledger-port 6865
 ```
  
 ## Discussion
