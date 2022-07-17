@@ -39,17 +39,6 @@ template Directory with
     signatory creator
     observer owner
 
-    -- TODO: not sure if required (see usage below)
-    -- nonconsuming choice AddDirectory: DirectoryId with
-    --     directory: DirectoryId
-    --   controller owner
-    --   do
-    --     archive self
-    --     dirNew <- create this with directories = directories ++ [directory]
-    --     case parent of
-    --       None -> return dirNew
-    --       Some p -> exercise p AddDirectory with directory = dirNew
-
     nonconsuming choice CreateDirectory: DirectoryId with
         dirName: Text
       controller owner
@@ -60,12 +49,6 @@ template Directory with
         subDir <- create Directory with creator = creator, parent = Some self, owner = owner, name = dirName, directories = [], files = []
         archive self
         create this with directories = directories ++ [subDir]
-        
-        -- TODO: not sure if its necessary to propagate up the folder tree
-        -- dirNew <- create this with directories = directories ++ [subDir]
-        -- case parent of
-        --   None -> return dirNew
-        --   Some p -> exercise p AddDirectory with directory = dirNew
 
     nonconsuming choice DeleteDirectory: () with
       controller owner
