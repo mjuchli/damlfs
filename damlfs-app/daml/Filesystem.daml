@@ -1,16 +1,98 @@
 module Filesystem where
 
 import DA.Foldable (mapA_)
+import DA.Map (Map)
+import DA.Map qualified as M
+import DA.Optional qualified as O
+import DA.Either (Either)
+import DA.Either qualified as E
+import DA.Set (Set)
+import DA.Set qualified as S
 
 type DirectoryId = ContractId Directory
 type FileId = ContractId File
+
+template FileSystem with
+    user: Party
+    index: Map DirectoryId (Set (Either DirectoryId FileId))
+  where
+    signatory user
+    key user: Party
+    maintainer key
+
+    choice MkDirRoot: ContractId FileSystem with
+        p: DirectoryId
+      controller user
+      do
+        let existing = M.lookup p index
+        assertMsg "Directory already exists" $ O.isNone existing
+        archive self
+        create this with index = M.insert p S.empty index
+
+    choice MkDir: ContractId FileSystem with
+        p: DirectoryId
+        c: DirectoryId
+      controller user
+      do
+        let existing = M.lookup p index
+        archive self
+        case existing of
+          None -> create this with index = M.insert p (S.fromList [E.Left c]) index
+          Some v -> create this with index = M.insert p (S.insert (E.Left c) v) index
+        
+    choice RmRf: ContractId FileSystem with 
+        d: DirectoryId
+      controller user
+      do
+        let withoutParent = M.toList $ M.delete d index
+        let withoutParentAndChildren = map (\(parent, children) -> (parent, S.filter (/= E.Left d) children)) withoutParent
+        archive self
+        create this with index = M.fromList withoutParentAndChildren
+    
+    choice Touch: ContractId FileSystem with
+        p: DirectoryId
+        c: FileId
+      controller user
+      do
+        let existing = M.lookup p index
+        archive self
+        case existing of
+          None -> create this with index = M.insert p (S.fromList [E.Right c]) index
+          Some v -> create this with index = M.insert p (S.insert (E.Right c) v) index
+        
+    choice Rm: ContractId FileSystem with 
+        f: FileId
+      controller user
+      do
+        let withoutChildren = map (\(parent, children) -> (parent, S.filter (/= E.Right f) children)) $ M.toList index
+        archive self
+        create this with index = M.fromList withoutChildren
+
+    -- Changing the Dir/File simply means swapping the ContractId 
+    -- choice Mv: ContractId FileSystem with
+    --     old: Either DirectoryId FileId
+    --     new: Either DirectoryId FileId
+    --     newParent: Optional DirectoryId
+    --   controller user
+    --   do
+    --     assertMsg "Must be of same type" $ E.isLeft old == E.isLeft new
+    --     case old of
+    --       E.Left  o -> do
+    --         let m = 
+    --       E.Right o -> do
+
+    choice Merge: ContractId FileSystem with
+        tupples: [(DirectoryId, Either DirectoryId FileId)]
+      controller user
+      do
+        -- TODO: merge map or store in separate shared index
+        return self
 
 template File with
     creator: Party
     owner: Party
     name: Text
     content: Text
-    path: DirectoryId
   where
     signatory creator
     observer owner
@@ -18,14 +100,9 @@ template File with
     nonconsuming choice DeleteFile: () with
       controller owner
       do
+        _ <- exerciseByKey @FileSystem owner Rm with f = self
         archive self
 
-    choice ChangeFileOwner: FileId with
-        newPath: DirectoryId
-        newOwner: Party
-      controller owner
-      do
-        create this with path = newPath, owner = newOwner
 
 
 template Directory with
@@ -75,7 +152,7 @@ template Directory with
       do
         existing <- mapA fetch files
         assertMsg "File already exists" $ fileName `notElem` (map (\e -> e.name) existing)
-        file <- create File with creator = creator, owner = owner, name = fileName, content = content, path = self
+        file <- create File with creator = creator, owner = owner, name = fileName, content = content
         archive self
         create this with files = files ++ [file]
         return file

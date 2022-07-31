@@ -3,6 +3,8 @@
 
 module User where
 
+import FileSystem
+
 -- MAIN_TEMPLATE_BEGIN
 template User with
     username: Party
@@ -45,3 +47,24 @@ template Alias with
         archive self
         create this with alias = newAlias
 -- ALIAS_END
+
+template ShareRequest with
+    sender: Party
+    receiver: Party
+    content: [(DirectoryId, Either DirectoryId FileId)] -- list of unfolded map contents requested to be shared 
+  where
+    signatory sender, receiver
+
+    nonconsuming choice SendRequest: ContractId ShareRequest with
+        sender: Party
+        content: [(DirectoryId, Either DirectoryId FileId)]
+      controller sender
+      do
+        assertMsg "Designated user must follow you back to send a share request" (elem sender following)
+        create ShareRequest with sender, receiver = username, content
+
+    nonconsuming choice AcceptRequest: ContractId ShareRequest with
+      controller receiver
+      do
+        _ <- exerciseByKey @FileSystem receiver Merge with tuples = content
+        archive self
